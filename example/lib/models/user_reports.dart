@@ -40,8 +40,8 @@ class UserReportsModel {
   factory UserReportsModel.fromModel(RecordModel r) {
     return UserReportsModel(
       id: r.id,
-      created: DateTime.parse(r.created),
-      updated: DateTime.parse(r.updated),
+      created: DateTime.parse(r.get<String>('created')),
+      updated: DateTime.parse(r.get<String>('updated')),
       reporter: r.data['reporter'],
       reportedUser: r.data['reported_user'],
       reason: r.data['reason'],

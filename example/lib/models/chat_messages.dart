@@ -36,8 +36,8 @@ class ChatMessagesModel {
   factory ChatMessagesModel.fromModel(RecordModel r) {
     return ChatMessagesModel(
       id: r.id,
-      created: DateTime.parse(r.created),
-      updated: DateTime.parse(r.updated),
+      created: DateTime.parse(r.get<String>('created')),
+      updated: DateTime.parse(r.get<String>('updated')),
       chat: r.data['chat'],
       content: r.data['content'],
       sender: r.data['sender'],

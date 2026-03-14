@@ -73,8 +73,8 @@ class MatchRequestsModel {
   factory MatchRequestsModel.fromModel(RecordModel r) {
     return MatchRequestsModel(
       id: r.id,
-      created: DateTime.parse(r.created),
-      updated: DateTime.parse(r.updated),
+      created: DateTime.parse(r.get<String>('created')),
+      updated: DateTime.parse(r.get<String>('updated')),
       userId: r.data['user_id'],
       budget: r.data['budget'],
       distance: r.data['distance'],

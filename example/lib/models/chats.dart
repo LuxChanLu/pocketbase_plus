@@ -40,8 +40,8 @@ class ChatsModel {
   factory ChatsModel.fromModel(RecordModel r) {
     return ChatsModel(
       id: r.id,
-      created: DateTime.parse(r.created),
-      updated: DateTime.parse(r.updated),
+      created: DateTime.parse(r.get<String>('created')),
+      updated: DateTime.parse(r.get<String>('updated')),
       user1: r.data['user1'],
       user2: r.data['user2'],
       deletedAt: r.data['deleted_at'] != null

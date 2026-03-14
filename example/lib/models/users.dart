@@ -73,8 +73,8 @@ class UsersModel {
   factory UsersModel.fromModel(RecordModel r) {
     return UsersModel(
       id: r.id,
-      created: DateTime.parse(r.created),
-      updated: DateTime.parse(r.updated),
+      created: DateTime.parse(r.get<String>('created')),
+      updated: DateTime.parse(r.get<String>('updated')),
       name: r.data['name'],
       avatar: r.data['avatar'],
       bio: r.data['bio'],

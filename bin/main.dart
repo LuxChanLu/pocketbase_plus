@@ -164,6 +164,7 @@ pocketbase:
 
 /// Authenticates an admin user with PocketBase.
 Future<void> authenticate(PocketBase pb, String email, String password) async {
+  // ignore: deprecated_member_use
   await pb.admins.authWithPassword(email, password);
 }
 
@@ -202,7 +203,7 @@ String generateModelForCollection(CollectionModel collection) {
   buffer.writeln();
 
   // Add enums for 'select' fields
-  for (var field in collection.schema) {
+  for (var field in collection.fields) {
     if (field.type == 'select') {
       generateEnumForField(buffer, field);
     }
@@ -210,20 +211,20 @@ String generateModelForCollection(CollectionModel collection) {
 
   // Add class declaration
   buffer.writeln("class ${removeSnake(capName(collection.name))}Model {");
-  generateClassFields(buffer, collection.schema);
-  generateConstructor(collection.name, buffer, collection.schema);
+  generateClassFields(buffer, collection.fields);
+  generateConstructor(collection.name, buffer, collection.fields);
   generateFactoryConstructor(buffer, collection);
-  generateToMapMethod(buffer, collection.schema);
+  generateToMapMethod(buffer, collection.fields);
   buffer.writeln("}"); // Close class
 
   return buffer.toString();
 }
 
 /// Generates an enum for a 'select' field in the collection schema.
-void generateEnumForField(StringBuffer buffer, SchemaField field) {
+void generateEnumForField(StringBuffer buffer, CollectionField field) {
   // Start the enum definition with constructor
   buffer.writeln('enum ${capName(removeSnake(field.name))}Enum {');
-  for (var option in field.options['values']) {
+  for (var option in field.get<List<dynamic>>('values', [])) {
     buffer.writeln('${removeSnake(option)}("$option"),');
   }
   buffer.writeln(';\n');
@@ -249,7 +250,7 @@ void generateEnumForField(StringBuffer buffer, SchemaField field) {
 }
 
 /// Generates the fields and their corresponding constants for the class.
-void generateClassFields(StringBuffer buffer, List<SchemaField> schema) {
+void generateClassFields(StringBuffer buffer, List<CollectionField> fields) {
   buffer.writeln(" \n // Fields");
   buffer.writeln("  final String? id;");
   buffer.writeln("  static const String Id = 'id';");
@@ -260,7 +261,7 @@ void generateClassFields(StringBuffer buffer, List<SchemaField> schema) {
   buffer.writeln("  \n final DateTime? updated;");
   buffer.writeln("  static const String Updated = 'updated';");
 
-  for (var field in schema) {
+  for (var field in fields) {
     buffer.writeln("  \n final ${getType(field)} ${removeSnake(field.name)};");
     buffer.writeln(
         "  static const String ${removeSnake(capName(field.name))} = '${field.name}';");
@@ -269,13 +270,13 @@ void generateClassFields(StringBuffer buffer, List<SchemaField> schema) {
 
 /// Generates the constructor for the class.
 void generateConstructor(
-    String colName, StringBuffer buffer, List<SchemaField> schema) {
+    String colName, StringBuffer buffer, List<CollectionField> fields) {
   buffer.writeln("\n  const ${removeSnake(capName(colName))}Model({");
   buffer.writeln("    this.id,");
   buffer.writeln("    this.created,");
   buffer.writeln("    this.updated,");
 
-  for (var field in schema) {
+  for (var field in fields) {
     buffer.writeln(
         "    ${field.required ? 'required' : ''} this.${removeSnake(field.name)},");
   }
@@ -288,7 +289,7 @@ void generateConstructor(
   buffer.writeln("    DateTime? created,");
   buffer.writeln("    DateTime? updated,");
 
-  for (var field in schema) {
+  for (var field in fields) {
     var type = getType(field);
     if (field.required && type != "dynamic") {
       buffer.writeln("    ${getType(field)}? ${removeSnake(field.name)},");
@@ -303,7 +304,7 @@ void generateConstructor(
   buffer.writeln("      created: created ?? this.created,");
   buffer.writeln("      updated: updated ?? this.updated,");
 
-  for (var field in schema) {
+  for (var field in fields) {
     buffer.writeln(
         "      ${removeSnake(field.name)}: ${removeSnake(field.name)} ?? this.${removeSnake(field.name)},");
   }
@@ -319,10 +320,10 @@ void generateFactoryConstructor(
       "\n  factory ${removeSnake(capName(collection.name))}Model.fromModel(RecordModel r) {");
   buffer.writeln("    return ${removeSnake(capName(collection.name))}Model(");
   buffer.writeln("      id: r.id,");
-  buffer.writeln("      created: DateTime.parse(r.created),");
-  buffer.writeln("      updated: DateTime.parse(r.updated),");
+  buffer.writeln("      created: DateTime.parse(r.get<String>('created')),");
+  buffer.writeln("      updated: DateTime.parse(r.get<String>('updated')),");
 
-  for (var field in collection.schema) {
+  for (var field in collection.fields) {
     if (field.type == 'select') {
       buffer.writeln(
           "      ${removeSnake(field.name)}: ${capName(removeSnake(field.name))}Enum.fromValue(r.data['${field.name}']! as String),");
@@ -345,11 +346,11 @@ void generateFactoryConstructor(
 }
 
 /// Generates the `toMap` method for the class, converting it to a Map.
-void generateToMapMethod(StringBuffer buffer, List<SchemaField> schema) {
+void generateToMapMethod(StringBuffer buffer, List<CollectionField> fields) {
   buffer.writeln("\n  Map<String, dynamic> toMap() {");
   buffer.writeln("    return {");
 
-  for (var field in schema) {
+  for (var field in fields) {
     if (field.type == 'select') {
       buffer
           .writeln("      '${field.name}': ${removeSnake(field.name)}.value,");
@@ -388,7 +389,7 @@ String removeSnake(String str) {
 }
 
 /// Maps the schema field type to a Dart type.
-String getType(SchemaField field) {
+String getType(CollectionField field) {
   switch (field.type) {
     case 'text':
       return field.required ? 'String' : 'String?';

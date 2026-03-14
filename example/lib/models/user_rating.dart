@@ -40,8 +40,8 @@ class UserRatingModel {
   factory UserRatingModel.fromModel(RecordModel r) {
     return UserRatingModel(
       id: r.id,
-      created: DateTime.parse(r.created),
-      updated: DateTime.parse(r.updated),
+      created: DateTime.parse(r.get<String>('created')),
+      updated: DateTime.parse(r.get<String>('updated')),
       raterUserId: r.data['rater_user_id'],
       ratedUserId: r.data['rated_user_id'],
       ratingValue: r.data['rating_value'],
