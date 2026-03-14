@@ -9,8 +9,11 @@ Automatically generates type-safe Dart models with CRUD helper methods from your
 - ✅ **Type-safe model classes** with `fromModel`, `toMap`, and `copyWith`
 - ✅ **Enum generation** for `select` fields
 - ✅ **CRUD extensions** - `save()`, `delete()`, `getOne()`, `getList()`, `getFullList()`, `create()`
+- ✅ **Static model methods** - `Model.getOne()`, `Model.getList()`, `Model.getFullList()`, `Model.create()`, `Model.update()`, `Model.delete()`
+- ✅ **Type-safe filter builders** - Fluent API for building queries with type safety
 - ✅ **Barrel file export** - `models.dart` that exports all generated files
 - ✅ **All field types** - text, email, url, editor, number, bool, date, datetime, select, json, file, relation
+- ✅ **Expand relations** - Type-safe access to expanded relation records
 
 ## Installation
 
@@ -184,6 +187,87 @@ final updated = await pb.updateUser('USER_ID', {'name': 'Jane'});
 // Delete
 await pb.deleteUser('USER_ID');
 ```
+
+### Static Methods (on Model class):
+
+```dart
+// Get single record by ID (returns null if not found)
+final user = await UsersModel.getOne(pb, 'USER_ID');
+
+// Get paginated list
+final users = await UsersModel.getList(pb, page: 1, perPage: 30);
+
+// Get all records with automatic pagination
+final allUsers = await UsersModel.getFullList(pb);
+
+// Get first matching filter (returns null if not found)
+final user = await UsersModel.getFirst(pb, 'email="test@example.com"');
+
+// Create
+final newUser = await UsersModel.create(pb, {'name': 'John', 'email': 'john@example.com'});
+
+// Update
+final updated = await UsersModel.update(pb, 'USER_ID', {'name': 'Jane'});
+
+// Delete
+await UsersModel.delete(pb, 'USER_ID');
+```
+
+## Type-Safe Filter Builders
+
+Each model generates a **filter builder** for type-safe queries:
+
+```dart
+import 'models/models.dart';
+
+Future<void> example() async {
+  final pb = PocketBase('https://your-pocketbase-domain.com');
+  
+  // Simple equality filter
+  final filter = UsersFilter().name.eq('John');
+  final users = await UsersModel.getList(pb, filter: filter.build());
+  
+  // Numeric comparison
+  final filter = UsersFilter().age.gt(18).age.lt(65);
+  final adults = await UsersModel.getList(pb, filter: filter.build());
+  
+  // Date filtering
+  final filter = UsersFilter().created.after(DateTime(2024, 1, 1));
+  final recentUsers = await UsersModel.getList(pb, filter: filter.build());
+  
+  // Enum filtering
+  final filter = UsersFilter().gender.eq(GenderEnum.male);
+  final maleUsers = await UsersModel.getList(pb, filter: filter.build());
+  
+  // Combined conditions (AND)
+  final filter = UsersFilter().name.eq('John') & UsersFilter().age.gt(18);
+  final johnsOver18 = await UsersModel.getList(pb, filter: filter.build());
+  
+  // Combined conditions (OR)
+  final filter = UsersFilter().name.eq('John') | UsersFilter().name.eq('Jane');
+  final johnOrJane = await UsersModel.getList(pb, filter: filter.build());
+  
+  // NOT condition
+  final filter = UsersFilter().not.name.eq('blocked');
+  final activeUsers = await UsersModel.getList(pb, filter: filter.build());
+  
+  // Using the shorthand accessor
+  final filter = UsersModel.f.name.eq('John');
+  final users = await UsersModel.getList(pb, filter: filter.build());
+}
+```
+
+### Available Operators by Field Type
+
+| Field Type | Operators |
+|------------|-----------|
+| text, email, url, editor | `eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `like`, `notLike`, `isNull`, `isNotNull`, `contains` |
+| number | `eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `between` |
+| date, datetime | `eq`, `neq`, `after`, `before`, `onOrAfter`, `onOrBefore`, `isNull`, `isNotNull` |
+| select (enum) | `eq`, `neq`, `isIn` |
+| bool | `eq`, `neq`, `isNull`, `isNotNull` |
+| relation (single) | `eq`, `neq`, `isNull`, `isNotNull` |
+| relation (multiple) | `contains`, `containsAny`, `hasLength` |
 
 ## License
 

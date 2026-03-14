@@ -244,7 +244,11 @@ String generateModelForCollection(
       collection.name, buffer, collection.fields, relationFields);
   generateFactoryConstructor(buffer, collection, relationFields);
   generateToMapMethod(buffer, collection.fields);
+  generateStaticMethods(buffer, collection);
+  generateFilterMethod(buffer, collection);
   buffer.writeln("}"); // Close class
+
+  generateFilterClass(buffer, collection);
 
   return buffer.toString();
 }
@@ -747,6 +751,389 @@ String generateExtensionForCollection(CollectionModel collection) {
   buffer.writeln('}');
 
   return buffer.toString();
+}
+
+/// Generates static CRUD methods for the model class.
+void generateStaticMethods(StringBuffer buffer, CollectionModel collection) {
+  final className = '${removeSnake(capName(collection.name))}Model';
+  final collectionName = collection.name;
+
+  buffer.writeln();
+  buffer.writeln('  // Static CRUD methods');
+  buffer.writeln();
+
+  buffer.writeln('  /// Fetches a single $className by ID.');
+  buffer.writeln('  /// Returns null if not found.');
+  buffer.writeln(
+      '  static Future<$className?> getOne(PocketBase pb, String id, {');
+  buffer.writeln('    String? expand,');
+  buffer.writeln('    String? fields,');
+  buffer.writeln('  }) async {');
+  buffer.writeln('    try {');
+  buffer.writeln(
+      "      final record = await pb.collection('$collectionName').getOne(");
+  buffer.writeln('        id,');
+  buffer.writeln('        expand: expand,');
+  buffer.writeln('        fields: fields,');
+  buffer.writeln('      );');
+  buffer.writeln('      return $className.fromModel(record);');
+  buffer.writeln('    } catch (_) {');
+  buffer.writeln('      return null;');
+  buffer.writeln('    }');
+  buffer.writeln('  }');
+  buffer.writeln();
+
+  buffer.writeln('  /// Fetches a paginated list of $className records.');
+  buffer.writeln('  static Future<List<$className>> getList(PocketBase pb, {');
+  buffer.writeln('    int page = 1,');
+  buffer.writeln('    int perPage = 30,');
+  buffer.writeln('    String? filter,');
+  buffer.writeln('    String? sort,');
+  buffer.writeln('    String? expand,');
+  buffer.writeln('    String? fields,');
+  buffer.writeln('  }) async {');
+  buffer.writeln(
+      "    final result = await pb.collection('$collectionName').getList(");
+  buffer.writeln('      page: page,');
+  buffer.writeln('      perPage: perPage,');
+  buffer.writeln('      filter: filter,');
+  buffer.writeln('      sort: sort,');
+  buffer.writeln('      expand: expand,');
+  buffer.writeln('      fields: fields,');
+  buffer.writeln('    );');
+  buffer.writeln('    return result.items.map($className.fromModel).toList();');
+  buffer.writeln('  }');
+  buffer.writeln();
+
+  buffer.writeln(
+      '  /// Fetches all $className records with automatic pagination.');
+  buffer.writeln(
+      '  static Future<List<$className>> getFullList(PocketBase pb, {');
+  buffer.writeln('    String? filter,');
+  buffer.writeln('    String? sort,');
+  buffer.writeln('    String? expand,');
+  buffer.writeln('    String? fields,');
+  buffer.writeln('    int batch = 1000,');
+  buffer.writeln('  }) async {');
+  buffer.writeln(
+      "    final records = await pb.collection('$collectionName').getFullList(");
+  buffer.writeln('      batch: batch,');
+  buffer.writeln('      filter: filter,');
+  buffer.writeln('      sort: sort,');
+  buffer.writeln('      expand: expand,');
+  buffer.writeln('      fields: fields,');
+  buffer.writeln('    );');
+  buffer.writeln('    return records.map($className.fromModel).toList();');
+  buffer.writeln('  }');
+  buffer.writeln();
+
+  buffer.writeln('  /// Fetches the first $className matching the filter.');
+  buffer.writeln('  /// Returns null if not found.');
+  buffer.writeln(
+      '  static Future<$className?> getFirst(PocketBase pb, String filter, {');
+  buffer.writeln('    String? expand,');
+  buffer.writeln('    String? fields,');
+  buffer.writeln('  }) async {');
+  buffer.writeln('    try {');
+  buffer.writeln(
+      "      final record = await pb.collection('$collectionName').getFirstListItem(");
+  buffer.writeln('        filter,');
+  buffer.writeln('        expand: expand,');
+  buffer.writeln('        fields: fields,');
+  buffer.writeln('      );');
+  buffer.writeln('      return $className.fromModel(record);');
+  buffer.writeln('    } catch (_) {');
+  buffer.writeln('      return null;');
+  buffer.writeln('    }');
+  buffer.writeln('  }');
+  buffer.writeln();
+
+  buffer.writeln('  /// Creates a new $className record.');
+  buffer.writeln(
+      '  static Future<$className> create(PocketBase pb, Map<String, dynamic> data, {');
+  buffer.writeln('    String? expand,');
+  buffer.writeln('    String? fields,');
+  buffer.writeln('  }) async {');
+  buffer.writeln(
+      "    final record = await pb.collection('$collectionName').create(");
+  buffer.writeln('      body: data,');
+  buffer.writeln('      expand: expand,');
+  buffer.writeln('      fields: fields,');
+  buffer.writeln('    );');
+  buffer.writeln('    return $className.fromModel(record);');
+  buffer.writeln('  }');
+  buffer.writeln();
+
+  buffer.writeln('  /// Updates an existing $className record.');
+  buffer.writeln(
+      '  static Future<$className> update(PocketBase pb, String id, Map<String, dynamic> data, {');
+  buffer.writeln('    String? expand,');
+  buffer.writeln('    String? fields,');
+  buffer.writeln('  }) async {');
+  buffer.writeln(
+      "    final record = await pb.collection('$collectionName').update(");
+  buffer.writeln('      id,');
+  buffer.writeln('      body: data,');
+  buffer.writeln('      expand: expand,');
+  buffer.writeln('      fields: fields,');
+  buffer.writeln('    );');
+  buffer.writeln('    return $className.fromModel(record);');
+  buffer.writeln('  }');
+  buffer.writeln();
+
+  buffer.writeln('  /// Deletes a $className record by ID.');
+  buffer.writeln(
+      '  static Future<void> delete(PocketBase pb, String id) async {');
+  buffer.writeln("    await pb.collection('$collectionName').delete(id);");
+  buffer.writeln('  }');
+}
+
+/// Generates the static filter getter for the model class.
+void generateFilterMethod(StringBuffer buffer, CollectionModel collection) {
+  final filterClassName = '${removeSnake(capName(collection.name))}Filter';
+
+  buffer.writeln();
+  buffer.writeln('  /// Returns a filter builder for this collection.');
+  buffer.writeln('  static $filterClassName get f => $filterClassName();');
+}
+
+/// Generates a type-safe filter class for the collection.
+void generateFilterClass(StringBuffer buffer, CollectionModel collection) {
+  final className = '${removeSnake(capName(collection.name))}Model';
+  final filterClassName = '${removeSnake(capName(collection.name))}Filter';
+
+  buffer.writeln();
+  buffer.writeln('/// Type-safe filter builder for $className.');
+  buffer.writeln('class $filterClassName {');
+  buffer.writeln('  final List<String> _conditions = [];');
+  buffer.writeln('  bool _negateNext = false;');
+  buffer.writeln();
+  buffer.writeln('  $filterClassName();');
+  buffer.writeln();
+  buffer.writeln('  void _add(String condition) {');
+  buffer.writeln('    if (_negateNext) {');
+  buffer.writeln("      _conditions.add('!(' + condition + ')');");
+  buffer.writeln('      _negateNext = false;');
+  buffer.writeln('    } else {');
+  buffer.writeln('      _conditions.add(condition);');
+  buffer.writeln('    }');
+  buffer.writeln('  }');
+  buffer.writeln();
+  buffer.writeln('  /// Negates the next condition.');
+  buffer.writeln('  $filterClassName get not {');
+  buffer.writeln('    _negateNext = true;');
+  buffer.writeln('    return this;');
+  buffer.writeln('  }');
+  buffer.writeln();
+  buffer.writeln('  /// Combines conditions with AND.');
+  buffer.writeln('  $filterClassName operator &($filterClassName other) {');
+  buffer.writeln('    final result = $filterClassName();');
+  buffer.writeln(
+      "    result._conditions.addAll([..._conditions, '&&', ...other._conditions]);");
+  buffer.writeln('    return result;');
+  buffer.writeln('  }');
+  buffer.writeln();
+  buffer.writeln('  /// Combines conditions with OR.');
+  buffer.writeln('  $filterClassName operator |($filterClassName other) {');
+  buffer.writeln('    final result = $filterClassName();');
+  buffer.writeln(
+      "    result._conditions.addAll([..._conditions, '||', ...other._conditions]);");
+  buffer.writeln('    return result;');
+  buffer.writeln('  }');
+  buffer.writeln();
+  buffer.writeln('  /// Builds the filter string.');
+  buffer.writeln('  String build() => _conditions.join(' ');');
+  buffer.writeln();
+
+  // Generate filter field getters
+  for (var field in collection.fields) {
+    final fieldName = removeSnake(field.name);
+
+    buffer.writeln('  /// Filter for field "${field.name}".');
+
+    if (field.type == 'select') {
+      final enumName = '${capName(fieldName)}Enum';
+      buffer.writeln(
+          '  _${className}EnumFilter get $fieldName => _${className}EnumFilter(\'${field.name}\', this, $enumName.values);');
+    } else if (field.type == 'number') {
+      buffer.writeln(
+          '  _${className}NumFilter get $fieldName => _${className}NumFilter(\'${field.name}\', this);');
+    } else if (field.type == 'date' || field.type == 'datetime') {
+      buffer.writeln(
+          '  _${className}DateFilter get $fieldName => _${className}DateFilter(\'${field.name}\', this);');
+    } else if (field.type == 'relation') {
+      final maxSelect = field.get<int>('options.maxSelect', 0);
+      if (maxSelect == 1) {
+        buffer.writeln(
+            '  _${className}FieldFilter get $fieldName => _${className}FieldFilter(\'${field.name}\', this);');
+      } else {
+        buffer.writeln(
+            '  _${className}ArrayFilter get $fieldName => _${className}ArrayFilter(\'${field.name}\', this);');
+      }
+    } else if (field.type == 'file') {
+      final maxSelect = field.get<int>('options.maxSelect', 0);
+      if (maxSelect == 1) {
+        buffer.writeln(
+            '  _${className}FieldFilter get $fieldName => _${className}FieldFilter(\'${field.name}\', this);');
+      } else {
+        buffer.writeln(
+            '  _${className}ArrayFilter get $fieldName => _${className}ArrayFilter(\'${field.name}\', this);');
+      }
+    } else if (field.type == 'bool') {
+      buffer.writeln(
+          '  _${className}FieldFilter get $fieldName => _${className}FieldFilter(\'${field.name}\', this);');
+    } else {
+      buffer.writeln(
+          '  _${className}FieldFilter get $fieldName => _${className}FieldFilter(\'${field.name}\', this);');
+    }
+    buffer.writeln();
+  }
+
+  // Also add id, created, updated fields
+  buffer.writeln('  /// Filter for field "id".');
+  buffer.writeln(
+      '  _${className}FieldFilter get id => _${className}FieldFilter(\'id\', this);');
+  buffer.writeln();
+  buffer.writeln('  /// Filter for field "created".');
+  buffer.writeln(
+      '  _${className}DateFilter get created => _${className}DateFilter(\'created\', this);');
+  buffer.writeln();
+  buffer.writeln('  /// Filter for field "updated".');
+  buffer.writeln(
+      '  _${className}DateFilter get updated => _${className}DateFilter(\'updated\', this);');
+
+  buffer.writeln('}');
+  buffer.writeln();
+
+  // Generate filter helper classes
+  buffer.writeln('class _${className}FieldFilter {');
+  buffer.writeln('  final String _fieldName;');
+  buffer.writeln('  final $filterClassName _builder;');
+  buffer.writeln('  _${className}FieldFilter(this._fieldName, this._builder);');
+  buffer.writeln();
+  buffer.writeln(
+      "  $filterClassName eq(dynamic value) => _builder.._add('\$_fieldName = \"\${_escape(value)}\"');");
+  buffer.writeln(
+      "  $filterClassName neq(dynamic value) => _builder.._add('\$_fieldName != \"\${_escape(value)}\"');");
+  buffer.writeln(
+      "  $filterClassName gt(dynamic value) => _builder.._add('\$_fieldName > \"\${_escape(value)}\"');");
+  buffer.writeln(
+      "  $filterClassName gte(dynamic value) => _builder.._add('\$_fieldName >= \"\${_escape(value)}\"');");
+  buffer.writeln(
+      "  $filterClassName lt(dynamic value) => _builder.._add('\$_fieldName < \"\${_escape(value)}\"');");
+  buffer.writeln(
+      "  $filterClassName lte(dynamic value) => _builder.._add('\$_fieldName <= \"\${_escape(value)}\"');");
+  buffer.writeln(
+      "  $filterClassName like(String pattern) => _builder.._add('\$_fieldName ~ \"\$pattern\"');");
+  buffer.writeln(
+      "  $filterClassName notLike(String pattern) => _builder.._add('\$_fieldName !~ \"\$pattern\"');");
+  buffer.writeln(
+      "  $filterClassName isNull() => _builder.._add('\$_fieldName = null');");
+  buffer.writeln(
+      "  $filterClassName isNotNull() => _builder.._add('\$_fieldName != null');");
+  buffer.writeln(
+      "  $filterClassName contains(String value) => _builder.._add('\$_fieldName ~ \"\${_escape(value)}\"');");
+  buffer.writeln();
+  buffer.writeln('  static String _escape(dynamic value) {');
+  buffer.writeln("    if (value == null) return 'null';");
+  buffer.writeln(
+      "    if (value is num || value is bool) return value.toString();");
+  buffer
+      .writeln("    final s = value.toString().replaceall(\"'\", \"\\\\'\");");
+  buffer.writeln("    return s;");
+  buffer.writeln('  }');
+  buffer.writeln('}');
+  buffer.writeln();
+
+  buffer.writeln('class _${className}NumFilter {');
+  buffer.writeln('  final String _fieldName;');
+  buffer.writeln('  final $filterClassName _builder;');
+  buffer.writeln('  _${className}NumFilter(this._fieldName, this._builder);');
+  buffer.writeln();
+  buffer.writeln(
+      "  $filterClassName eq(num value) => _builder.._add('\$_fieldName = \$value');");
+  buffer.writeln(
+      "  $filterClassName neq(num value) => _builder.._add('\$_fieldName != \$value');");
+  buffer.writeln(
+      "  $filterClassName gt(num value) => _builder.._add('\$_fieldName > \$value');");
+  buffer.writeln(
+      "  $filterClassName gte(num value) => _builder.._add('\$_fieldName >= \$value');");
+  buffer.writeln(
+      "  $filterClassName lt(num value) => _builder.._add('\$_fieldName < \$value');");
+  buffer.writeln(
+      "  $filterClassName lte(num value) => _builder.._add('\$_fieldName <= \$value');");
+  buffer.writeln(
+      "  $filterClassName between(num min, num max) => _builder.._add('\$_fieldName >= \$min && \$_fieldName <= \$max');");
+  buffer.writeln('}');
+  buffer.writeln();
+
+  buffer.writeln('class _${className}DateFilter {');
+  buffer.writeln('  final String _fieldName;');
+  buffer.writeln('  final $filterClassName _builder;');
+  buffer.writeln('  _${className}DateFilter(this._fieldName, this._builder);');
+  buffer.writeln();
+  buffer.writeln(
+      '  static String _format(DateTime dt) => dt.toUtc().toIso8601String().replaceAll("T", " ");');
+  buffer.writeln();
+  buffer.writeln(
+      "  $filterClassName eq(DateTime value) => _builder.._add('\$_fieldName = \"\${_format(value)}\"');");
+  buffer.writeln(
+      "  $filterClassName neq(DateTime value) => _builder.._add('\$_fieldName != \"\${_format(value)}\"');");
+  buffer.writeln(
+      "  $filterClassName after(DateTime value) => _builder.._add('\$_fieldName > \"\${_format(value)}\"');");
+  buffer.writeln(
+      "  $filterClassName before(DateTime value) => _builder.._add('\$_fieldName < \"\${_format(value)}\"');");
+  buffer.writeln(
+      "  $filterClassName onOrAfter(DateTime value) => _builder.._add('\$_fieldName >= \"\${_format(value)}\"');");
+  buffer.writeln(
+      "  $filterClassName onOrBefore(DateTime value) => _builder.._add('\$_fieldName <= \"\${_format(value)}\"');");
+  buffer.writeln(
+      "  $filterClassName isNull() => _builder.._add('\$_fieldName = null');");
+  buffer.writeln(
+      "  $filterClassName isNotNull() => _builder.._add('\$_fieldName != null');");
+  buffer.writeln('}');
+  buffer.writeln();
+
+  buffer.writeln('class _${className}EnumFilter<E extends Enum> {');
+  buffer.writeln('  final String _fieldName;');
+  buffer.writeln('  final $filterClassName _builder;');
+  buffer.writeln('  final List<E> _values;');
+  buffer.writeln(
+      '  _${className}EnumFilter(this._fieldName, this._builder, this._values);');
+  buffer.writeln();
+  buffer.writeln('  String _escapeValue(E value) {');
+  buffer.writeln('    final dynamic v = value;');
+  buffer.writeln(
+      "    final str = v.value != null ? v.value.toString() : value.name;");
+  buffer.writeln("    final escaped = str.replaceAll(\"'\", \"\\\\'\");");
+  buffer.writeln("    return \"'\$escaped'\";");
+  buffer.writeln('  }');
+  buffer.writeln();
+  buffer.writeln(
+      "  $filterClassName eq(E value) => _builder.._add('\$_fieldName = '\${_escapeValue(value)}');");
+  buffer.writeln(
+      "  $filterClassName neq(E value) => _builder.._add('\$_fieldName != '\${_escapeValue(value)}');");
+  buffer.writeln(
+      "  $filterClassName isIn(List<E> values) => _builder.._add('\$_fieldName ?= ('\${values.map(_escapeValue).join(', ')})');");
+  buffer.writeln('}');
+  buffer.writeln();
+
+  buffer.writeln('class _${className}ArrayFilter {');
+  buffer.writeln('  final String _fieldName;');
+  buffer.writeln('  final $filterClassName _builder;');
+  buffer.writeln('  _${className}ArrayFilter(this._fieldName, this._builder);');
+  buffer.writeln();
+  buffer.writeln(
+      "  $filterClassName contains(String value) => _builder.._add('\$_fieldName ?= \"\$value\"');");
+  buffer.writeln("  $filterClassName containsAny(List<String> values) {");
+  buffer.writeln(
+      "    final escaped = values.map((v) => \"'\" + v.replaceAll(\"'\", r\"\\'\") + \"'\").join(', ');");
+  buffer.writeln(
+      "    return _builder.._add('\$_fieldName ?= (' + escaped + ')');");
+  buffer.writeln('  }');
+  buffer.writeln(
+      "  $filterClassName hasLength(int length) => _builder.._add('\$_fieldName.length = \$length');");
+  buffer.writeln('}');
 }
 
 /// Generates a barrel file that exports all models and extensions.

@@ -235,6 +235,122 @@ import 'chats.dart';      // Imported because "chat" relates to "chats"
 - The `collectionId` in the PocketBase schema maps the relation to its target collection
 - Self-referential relations (collection references itself) are supported
 
+### Static CRUD Methods
+
+Generated model classes include static methods for common operations:
+
+```dart
+class UsersModel {
+  // ... fields and constructors ...
+
+  // Static fetch methods
+  static Future<UsersModel?> getOne(PocketBase pb, String id, {String? expand, String? fields});
+  static Future<List<UsersModel>> getList(PocketBase pb, {int page, int perPage, String? filter, String? sort, String? expand, String? fields});
+  static Future<List<UsersModel>> getFullList(PocketBase pb, {String? filter, String? sort, String? expand, String? fields, int batch});
+  static Future<UsersModel?> getFirst(PocketBase pb, String filter, {String? expand, String? fields});
+
+  // Static mutation methods
+  static Future<UsersModel> create(PocketBase pb, Map<String, dynamic> data, {String? expand, String? fields});
+  static Future<UsersModel> update(PocketBase pb, String id, Map<String, dynamic> data, {String? expand, String? fields});
+  static Future<void> delete(PocketBase pb, String id);
+
+  // Filter builder accessor
+  static UsersFilter get f => UsersFilter();
+}
+```
+
+**Usage:**
+```dart
+// Fetch single record
+final user = await UsersModel.getOne(pb, 'USER_ID');
+
+// Fetch paginated list
+final users = await UsersModel.getList(pb, page: 1, perPage: 30);
+
+// Fetch all records
+final allUsers = await UsersModel.getFullList(pb);
+
+// Create new record
+final newUser = await UsersModel.create(pb, {'name': 'John', 'email': 'john@example.com'});
+
+// Update record
+final updated = await UsersModel.update(pb, 'USER_ID', {'name': 'Jane'});
+
+// Delete record
+await UsersModel.delete(pb, 'USER_ID');
+```
+
+### Type-Safe Filter Builders
+
+Each model generates a companion `Filter` class for building type-safe queries:
+
+```dart
+class UsersFilter {
+  // Field filter accessors
+  _UsersFieldFilter get name;      // For text/email/url/editor fields
+  _UsersNumFilter get age;         // For number fields
+  _UsersDateFilter get created;     // For date/datetime fields
+  _UsersEnumFilter<GenderEnum> get gender;  // For select fields
+  _UsersArrayFilter get tags;      // For multi-select relation/file fields
+
+  // Logical operators
+  UsersFilter operator &(UsersFilter other);  // AND
+  UsersFilter operator |(UsersFilter other);  // OR
+  UsersFilter get not;                         // NOT
+
+  String build();  // Returns filter string
+}
+```
+
+**Usage Examples:**
+```dart
+// Simple equality
+final filter = UsersFilter().name.eq('John');
+await UsersModel.getList(pb, filter: filter.build());
+
+// Numeric comparison
+final filter = UsersFilter().age.gt(18).age.lt(65);
+await UsersModel.getList(pb, filter: filter.build());
+
+// Date filtering
+final filter = UsersFilter().created.after(DateTime(2024, 1, 1));
+await UsersModel.getList(pb, filter: filter.build());
+
+// Enum filtering
+final filter = UsersFilter().gender.eq(GenderEnum.male);
+await UsersModel.getList(pb, filter: filter.build());
+
+// Combined conditions (AND)
+final filter = UsersFilter().name.eq('John') & UsersFilter().age.gt(18);
+await UsersModel.getList(pb, filter: filter.build());
+
+// Combined conditions (OR)
+final filter = UsersFilter().name.eq('John') | UsersFilter().name.eq('Jane');
+await UsersModel.getList(pb, filter: filter.build());
+
+// NOT condition
+final filter = UsersFilter().not.name.eq('blocked');
+await UsersModel.getList(pb, filter: filter.build());
+
+// Using the shorthand accessor
+final filter = UsersModel.f.name.eq('John');
+await UsersModel.getList(pb, filter: filter.build());
+```
+
+**Field Filter Types:**
+| Field Type | Filter Class | Available Operators |
+|------------|---------------|---------------------|
+| text, email, url, editor | `FieldFilter` | `eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `like`, `notLike`, `isNull`, `isNotNull`, `contains` |
+| number | `NumFilter` | `eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `between` |
+| date, datetime | `DateFilter` | `eq`, `neq`, `after`, `before`, `onOrAfter`, `onOrBefore`, `isNull`, `isNotNull` |
+| select (enum) | `EnumFilter` | `eq`, `neq`, `isIn` |
+| bool | `FieldFilter` | `eq`, `neq`, `isNull`, `isNotNull` |
+| relation (single) | `FieldFilter` | `eq`, `neq`, `isNull`, `isNotNull` |
+| relation (multiple) | `ArrayFilter` | `contains`, `containsAny`, `hasLength` |
+| file (multiple) | `ArrayFilter` | `contains`, `containsAny`, `hasLength` |
+- The `collectionId` in the PocketBase schema maps the relation to its target collection
+- Self-referential relations (collection references itself) are supported
+
 ### Known Limitations
 
 **File Uploads:**
