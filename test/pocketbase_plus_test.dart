@@ -1,5 +1,6 @@
 import 'package:test/test.dart';
 import 'package:pocketbase_plus/pocketbase_plus.dart';
+import 'package:pocketbase/pocketbase.dart';
 
 void main() {
   group('String Helpers', () {
@@ -117,6 +118,35 @@ void main() {
         expect(copy.password, equals(original.password));
         expect(copy.outputDirectory, equals('./lib/generated'));
       });
+    });
+  });
+
+  group('CollectionField', () {
+    test('accesses nested properties via get() method with dot notation', () {
+      final field = CollectionField({
+        'id': 'field1',
+        'name': 'user',
+        'type': 'relation',
+        'options': {
+          'maxSelect': 1,
+          'collectionId': 'users_collection',
+        },
+      });
+
+      expect(field.type, equals('relation'));
+      expect(field.get<int>('options.maxSelect', 0), equals(1));
+      expect(field.get<String>('options.collectionId', ''),
+          equals('users_collection'));
+    });
+
+    test('returns default value when nested property is missing', () {
+      final field = CollectionField({
+        'id': 'field1',
+        'name': 'user',
+        'type': 'text',
+      });
+
+      expect(field.get<int>('options.maxSelect', 99), equals(99));
     });
   });
 }

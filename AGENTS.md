@@ -197,6 +197,44 @@ factory UsersModel.fromModel(RecordModel r) {
 | `relation` (single) | `String` | `String?` |
 | `relation` (multiple) | `List<String>` | `List<String>?` |
 
+### Relation Fields with Expand
+
+Generated models include **expand fields** for relation fields, allowing type-safe access to expanded records:
+
+```dart
+// Example: chat_messages collection has "sender" relation to "users" collection
+class ChatMessagesModel {
+  final String? id;
+  final String? sender;              // Relation ID (always available)
+  final UsersModel? senderExpanded;  // Expanded record (only when queried with expand)
+  // ...
+}
+
+// Usage with expand:
+final messages = await pb.getChatMessagesList(expand: 'sender');
+for (final msg in messages) {
+  print(msg.sender);              // ID string
+  print(msg.senderExpanded?.name); // Expanded user data (null if not expanded)
+}
+```
+
+**Expand Field Naming:**
+- Single relations (`maxSelect: 1`): `{fieldName}Expanded` with type `TargetModel?`
+- Multiple relations (`maxSelect > 1`): `{fieldName}Expanded` with type `List<TargetModel>?`
+
+**Cross-Collection Imports:**
+Generation automatically adds imports for related collections:
+```dart
+import 'package:pocketbase/pocketbase.dart';
+import 'users.dart';      // Imported because "sender" relates to "users"
+import 'chats.dart';      // Imported because "chat" relates to "chats"
+```
+
+**Important Implementation Notes:**
+- Expand fields are always nullable (expand is optional at query time)
+- The `collectionId` in the PocketBase schema maps the relation to its target collection
+- Self-referential relations (collection references itself) are supported
+
 ### Known Limitations
 
 **File Uploads:**

@@ -165,11 +165,23 @@ void createModelsDirectory(String path) {
 
 /// Generates Dart models for all collections.
 void generateModels(List<CollectionModel> collections, String outputDirectory) {
+  final collectionRegistry = _buildCollectionRegistry(collections);
   for (var collection in collections) {
-    final modelContent = generateModelForCollection(collection);
+    final modelContent =
+        generateModelForCollection(collection, collectionRegistry);
     final filePath = pp.join(outputDirectory, '${collection.name}.dart');
     File(filePath).writeAsStringSync(modelContent);
   }
+}
+
+/// Builds a registry mapping collection IDs to collection names.
+Map<String, String> _buildCollectionRegistry(
+    List<CollectionModel> collections) {
+  final registry = <String, String>{};
+  for (var collection in collections) {
+    registry[collection.id] = collection.name;
+  }
+  return registry;
 }
 
 /// Formats the generated model files using Dart's formatter.
@@ -178,8 +190,27 @@ void formatGeneratedModels(String modelsPath) {
 }
 
 /// Generates the Dart model code for a single collection.
-String generateModelForCollection(CollectionModel collection) {
+String generateModelForCollection(
+    CollectionModel collection, Map<String, String> collectionRegistry) {
   final buffer = StringBuffer();
+
+  // Find relation fields and their target collections
+  final relationImports = <String>{};
+  final relationFields = <MapEntry<CollectionField, String>>[];
+  for (var field in collection.fields) {
+    if (field.type == 'relation') {
+      final collectionId = field.get<String>('options.collectionId', '');
+      final targetCollectionName = collectionRegistry[collectionId];
+      if (targetCollectionName != null) {
+        relationImports.add(targetCollectionName);
+        relationFields.add(MapEntry(field, targetCollectionName));
+      } else if (collectionId.isNotEmpty) {
+        print(
+            'Warning: Relation field "${field.name}" in collection "${collection.name}" '
+            'references unknown collection ID "$collectionId". Expand field not generated.');
+      }
+    }
+  }
 
   // Add file documentation and imports
   buffer.writeln('// This file is auto-generated. Do not modify manually.');
@@ -187,6 +218,16 @@ String generateModelForCollection(CollectionModel collection) {
   buffer.writeln('// ignore_for_file: constant_identifier_names');
   buffer.writeln();
   buffer.writeln("import 'package:pocketbase/pocketbase.dart';");
+
+  // Add imports for relation target collections
+  for (var importedCollection in relationImports) {
+    final importName = importedCollection == collection.name
+        ? '' // Skip self-import
+        : "import '$importedCollection.dart';";
+    if (importName.isNotEmpty) {
+      buffer.writeln(importName);
+    }
+  }
   buffer.writeln();
 
   // Add enums for 'select' fields
@@ -198,9 +239,10 @@ String generateModelForCollection(CollectionModel collection) {
 
   // Add class declaration
   buffer.writeln("class ${removeSnake(capName(collection.name))}Model {");
-  generateClassFields(buffer, collection.fields);
-  generateConstructor(collection.name, buffer, collection.fields);
-  generateFactoryConstructor(buffer, collection);
+  generateClassFields(buffer, collection.fields, relationFields);
+  generateConstructor(
+      collection.name, buffer, collection.fields, relationFields);
+  generateFactoryConstructor(buffer, collection, relationFields);
   generateToMapMethod(buffer, collection.fields);
   buffer.writeln("}"); // Close class
 
@@ -211,7 +253,7 @@ String generateModelForCollection(CollectionModel collection) {
 void generateEnumForField(StringBuffer buffer, CollectionField field) {
   // Start the enum definition with constructor
   buffer.writeln('enum ${capName(removeSnake(field.name))}Enum {');
-  for (var option in field.get<List<dynamic>>('values', [])) {
+  for (var option in field.get<List<dynamic>>('options.values', [])) {
     buffer.writeln('${removeSnake(option)}("$option"),');
   }
   buffer.writeln(';\n');
@@ -237,7 +279,11 @@ void generateEnumForField(StringBuffer buffer, CollectionField field) {
 }
 
 /// Generates the fields and their corresponding constants for the class.
-void generateClassFields(StringBuffer buffer, List<CollectionField> fields) {
+void generateClassFields(
+  StringBuffer buffer,
+  List<CollectionField> fields,
+  List<MapEntry<CollectionField, String>> relationFields,
+) {
   buffer.writeln('');
   buffer.writeln('  // Fields');
   buffer.writeln('  final String? id;');
@@ -257,11 +303,31 @@ void generateClassFields(StringBuffer buffer, List<CollectionField> fields) {
     buffer.writeln(
         "  static const String ${removeSnake(capName(field.name))} = '${field.name}';");
   }
+
+  // Generate expand fields for relations
+  for (var entry in relationFields) {
+    final field = entry.key;
+    final targetCollection = entry.value;
+    final fieldName = removeSnake(field.name);
+    final targetClassName = '${removeSnake(capName(targetCollection))}Model';
+    final maxSelect = field.get<int>('options.maxSelect', 0);
+
+    buffer.writeln('');
+    if (maxSelect == 1) {
+      buffer.writeln('  $targetClassName? ${fieldName}Expanded;');
+    } else {
+      buffer.writeln('  List<$targetClassName>? ${fieldName}Expanded;');
+    }
+  }
 }
 
 /// Generates the constructor for the class.
 void generateConstructor(
-    String colName, StringBuffer buffer, List<CollectionField> fields) {
+  String colName,
+  StringBuffer buffer,
+  List<CollectionField> fields,
+  List<MapEntry<CollectionField, String>> relationFields,
+) {
   buffer.writeln('');
   buffer.writeln('  const ${removeSnake(capName(colName))}Model({');
   buffer.writeln('    this.id,');
@@ -271,6 +337,11 @@ void generateConstructor(
   for (var field in fields) {
     buffer.writeln(
         "    ${field.required ? 'required' : ''} this.${removeSnake(field.name)},");
+  }
+
+  // Add expand fields to constructor (always optional)
+  for (var entry in relationFields) {
+    buffer.writeln('    this.${removeSnake(entry.key.name)}Expanded,');
   }
 
   buffer.writeln('  });');
@@ -290,6 +361,22 @@ void generateConstructor(
     }
   }
 
+  // Add expand fields to copyWith
+  for (var entry in relationFields) {
+    final field = entry.key;
+    final targetCollection = entry.value;
+    final targetClassName = '${removeSnake(capName(targetCollection))}Model';
+    final maxSelect = field.get<int>('options.maxSelect', 0);
+    final fieldName = removeSnake(field.name);
+    final expandFieldName = '${fieldName}Expanded';
+
+    if (maxSelect == 1) {
+      buffer.writeln('    $targetClassName? $expandFieldName,');
+    } else {
+      buffer.writeln('    List<$targetClassName>? $expandFieldName,');
+    }
+  }
+
   buffer.writeln('  }) {');
   buffer.writeln('    return ${removeSnake(capName(colName))}Model(');
   buffer.writeln('      id: id ?? this.id,');
@@ -301,13 +388,24 @@ void generateConstructor(
         "      ${removeSnake(field.name)}: ${removeSnake(field.name)} ?? this.${removeSnake(field.name)},");
   }
 
+  // Add expand fields to copyWith return
+  for (var entry in relationFields) {
+    final fieldName = removeSnake(entry.key.name);
+    final expandFieldName = '${fieldName}Expanded';
+    buffer.writeln(
+        "      $expandFieldName: $expandFieldName ?? this.$expandFieldName,");
+  }
+
   buffer.writeln('    );');
   buffer.writeln('  }');
 }
 
 /// Generates the factory constructor for creating an instance from a PocketBase model.
 void generateFactoryConstructor(
-    StringBuffer buffer, CollectionModel collection) {
+  StringBuffer buffer,
+  CollectionModel collection,
+  List<MapEntry<CollectionField, String>> relationFields,
+) {
   buffer.writeln('');
   buffer.writeln(
       '  factory ${removeSnake(capName(collection.name))}Model.fromModel(RecordModel r) {');
@@ -338,7 +436,7 @@ void generateFactoryConstructor(
             "      $fieldName: r.data['${field.name}'] != null ? Map<String, dynamic>.from(r.data['${field.name}']) : null,");
       }
     } else if (field.type == 'relation') {
-      final maxSelect = field.get<int>('maxSelect', 0);
+      final maxSelect = field.get<int>('options.maxSelect', 0);
       if (maxSelect == 1) {
         buffer.writeln("      $fieldName: r.data['${field.name}'] as String?,");
       } else {
@@ -346,7 +444,7 @@ void generateFactoryConstructor(
             "      $fieldName: (r.data['${field.name}'] as List<dynamic>?)?.cast<String>(),");
       }
     } else if (field.type == 'file') {
-      final maxSelect = field.get<int>('maxSelect', 0);
+      final maxSelect = field.get<int>('options.maxSelect', 0);
       if (maxSelect == 1) {
         buffer.writeln("      $fieldName: r.data['${field.name}'] as String?,");
       } else {
@@ -355,6 +453,32 @@ void generateFactoryConstructor(
       }
     } else {
       buffer.writeln("      $fieldName: r.data['${field.name}'],");
+    }
+  }
+
+  // Generate expand field parsing for relations
+  for (var entry in relationFields) {
+    final field = entry.key;
+    final targetCollection = entry.value;
+    final targetClassName = '${removeSnake(capName(targetCollection))}Model';
+    final fieldName = removeSnake(field.name);
+    final expandFieldName = '${fieldName}Expanded';
+    final maxSelect = field.get<int>('options.maxSelect', 0);
+
+    buffer.writeln('');
+    if (maxSelect == 1) {
+      buffer.writeln('      $expandFieldName: () {');
+      buffer.writeln('        final expanded = r.get<RecordModel?>('
+          "'expand.${field.name}', null);");
+      buffer.writeln('        return expanded != null');
+      buffer.writeln('          ? $targetClassName.fromModel(expanded)');
+      buffer.writeln('          : null;');
+      buffer.writeln('      }(),');
+    } else {
+      buffer.writeln('      $expandFieldName: '
+          "r.get<List<RecordModel>>('expand.${field.name}', [])");
+      buffer.writeln('        .map((e) => $targetClassName.fromModel(e))');
+      buffer.writeln('        .toList(),');
     }
   }
 
@@ -430,13 +554,13 @@ String getType(CollectionField field) {
     case 'json':
       return field.required ? 'Map<String, dynamic>' : 'Map<String, dynamic>?';
     case 'file':
-      final maxSelect = field.get<int>('maxSelect', 0);
+      final maxSelect = field.get<int>('options.maxSelect', 0);
       if (maxSelect == 1) {
         return field.required ? 'String' : 'String?';
       }
       return field.required ? 'List<String>' : 'List<String>?';
     case 'relation':
-      final maxSelect = field.get<int>('maxSelect', 0);
+      final maxSelect = field.get<int>('options.maxSelect', 0);
       if (maxSelect == 1) {
         return field.required ? 'String' : 'String?';
       }
