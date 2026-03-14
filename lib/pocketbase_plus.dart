@@ -1,8 +1,9 @@
-/// Support for doing something awesome.
+/// PocketBase Plus - Automated model generation for PocketBase.
 ///
-/// More dartdocs go here.
+/// This library provides helper functions for model generation and
+/// configuration management.
 library;
 
 export 'src/models.dart';
-
-// TODO: Export any libraries intended for clients of this package.
+export 'src/helpers.dart';
+export 'src/config.dart';

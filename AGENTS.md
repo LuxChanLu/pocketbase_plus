@@ -4,7 +4,7 @@ This document provides essential information for agentic coding agents working i
 
 ## Project Overview
 
-Pocketbase Plus is a Dart package that automates model generation for PocketBase projects. It fetches collection schemas from PocketBase and generates type-safe Dart model classes.
+Pocketbase Plus is a Dart package that automates model generation for PocketBase projects. It fetches collection schemas from PocketBase and generates type-safe Dart model classes with CRUD helper methods.
 
 **PocketBase SDK Version:** Requires PocketBase Dart SDK >=0.23.0 (compatible with PocketBase v0.23.0+)
 
@@ -13,6 +13,11 @@ Pocketbase Plus is a Dart package that automates model generation for PocketBase
 - `CollectionModel.schema` is now `CollectionModel.fields`
 - `RecordModel.created/updated` properties are deprecated; use `r.get<String>('created')` instead
 - `pb.admins` is deprecated; use `pb.collection('_superusers')` for admin authentication
+
+**Generated Files:**
+- `<collection>.dart` - Model class with fields, constructor, fromModel, toMap, copyWith
+- `<collection>_extension.dart` - Extension methods for CRUD operations
+- `models.dart` - Barrel file exporting all models and extensions
 
 ## Build/Lint/Test Commands
 
@@ -24,6 +29,16 @@ dart run pocketbase_plus:main
 # Run with custom config file
 dart run pocketbase_plus:main --config pubspec.yaml
 dart run pocketbase_plus:main -c path/to/config.yaml
+
+# Override output directory
+dart run pocketbase_plus:main --output ./lib/generated
+dart run pocketbase_plus:main -o ./lib/generated
+
+# Skip extension generation (no CRUD methods)
+dart run pocketbase_plus:main --no-extensions
+
+# Skip barrel file generation
+dart run pocketbase_plus:main --no-barrel
 
 # Show help
 dart run pocketbase_plus:main --help
@@ -162,6 +177,45 @@ factory UsersModel.fromModel(RecordModel r) {
   );
 }
 ```
+
+### Supported Field Types
+
+| Field Type | Dart Type (Required) | Dart Type (Optional) |
+|------------|---------------------|----------------------|
+| `text` | `String` | `String?` |
+| `email` | `String` | `String?` |
+| `url` | `String` | `String?` |
+| `editor` | `String` | `String?` |
+| `number` | `num` | `num?` |
+| `bool` | `bool` | `bool?` |
+| `date` | `DateTime` | `DateTime?` |
+| `datetime` | `DateTime` | `DateTime?` |
+| `select` | Generated Enum | Generated Enum? |
+| `json` | `Map<String, dynamic>` | `Map<String, dynamic>?` |
+| `file` (single) | `String` | `String?` |
+| `file` (multiple) | `List<String>` | `List<String>?` |
+| `relation` (single) | `String` | `String?` |
+| `relation` (multiple) | `List<String>` | `List<String>?` |
+
+### Known Limitations
+
+**File Uploads:**
+The generated `save()` method uses `toMap()` which serializes data as JSON. For file uploads, you must use the PocketBase SDK directly:
+
+```dart
+// For file uploads, use the SDK directly:
+await pb.collection('users').create(
+  body: {'name': 'John'},
+  files: [
+    http.MultipartFile.fromPath('avatar', '/path/to/file.jpg'),
+  ],
+);
+```
+
+Generated extensions work for all other CRUD operations.
+
+**copyWith Semantics:**
+The generated `copyWith` method uses nullable parameters for all fields, including required ones. This follows Dart conventions where passing `null` means "keep the existing value". To explicitly clear an optional field, reconstruct the model without that field.
 
 ### Error Handling
 
