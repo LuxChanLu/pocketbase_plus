@@ -218,6 +218,7 @@ String generateModelForCollection(
   buffer.writeln('// ignore_for_file: constant_identifier_names');
   buffer.writeln();
   buffer.writeln("import 'package:pocketbase/pocketbase.dart';");
+  buffer.writeln("import 'package:pocketbase_plus/pocketbase_plus.dart';");
 
   // Add imports for relation target collections
   for (var importedCollection in relationImports) {
@@ -238,17 +239,33 @@ String generateModelForCollection(
   }
 
   // Add class declaration
-  buffer.writeln("class ${removeSnake(capName(collection.name))}Model {");
+  final className = '${removeSnake(capName(collection.name))}Model';
+  buffer.writeln("class $className {");
+  // Add collection constants
+  buffer.writeln("  static const String collectionId = '${collection.id}';");
+  buffer
+      .writeln("  static const String collectionName = '${collection.name}';");
+  buffer.writeln();
   generateClassFields(buffer, collection.fields, relationFields);
   generateConstructor(
       collection.name, buffer, collection.fields, relationFields);
   generateFactoryConstructor(buffer, collection, relationFields);
   generateToMapMethod(buffer, collection.fields);
+  generateCopyWithMethod(
+      collection.name, buffer, collection.fields, relationFields);
+  generateEqualityMethods(buffer, collection.name, collection.fields);
+  generateToStringMethod(buffer, collection.name, collection.fields);
+  generateFileUrlMethods(buffer, collection, collection.fields);
   generateStaticMethods(buffer, collection);
   generateFilterMethod(buffer, collection);
   buffer.writeln("}"); // Close class
 
   generateFilterClass(buffer, collection);
+
+  // Generate auth methods for auth-type collections
+  if (collection.type == 'auth') {
+    generateAuthMethods(buffer, collection);
+  }
 
   return buffer.toString();
 }
@@ -349,7 +366,15 @@ void generateConstructor(
   }
 
   buffer.writeln('  });');
+}
 
+/// Generates the copyWith method for the class.
+void generateCopyWithMethod(
+  String colName,
+  StringBuffer buffer,
+  List<CollectionField> fields,
+  List<MapEntry<CollectionField, String>> relationFields,
+) {
   buffer.writeln('');
   buffer.writeln('  ${removeSnake(capName(colName))}Model copyWith({');
   buffer.writeln('    String? id,');
@@ -402,6 +427,116 @@ void generateConstructor(
 
   buffer.writeln('    );');
   buffer.writeln('  }');
+}
+
+/// Generates equality and hashCode methods.
+void generateEqualityMethods(
+  StringBuffer buffer,
+  String colName,
+  List<CollectionField> fields,
+) {
+  final className = '${removeSnake(capName(colName))}Model';
+
+  buffer.writeln('');
+  buffer.writeln('  @override');
+  buffer.writeln('  bool operator ==(Object other) {');
+  buffer.writeln('    if (identical(this, other)) return true;');
+  buffer.writeln('    return other is $className && other.id == id;');
+  buffer.writeln('  }');
+  buffer.writeln();
+  buffer.writeln('  @override');
+  buffer.writeln('  int get hashCode => id?.hashCode ?? 0;');
+}
+
+/// Generates toString method.
+void generateToStringMethod(
+  StringBuffer buffer,
+  String colName,
+  List<CollectionField> fields,
+) {
+  final className = '${removeSnake(capName(colName))}Model';
+
+  buffer.writeln('');
+  buffer.writeln('  @override');
+  buffer.writeln('  String toString() {');
+  buffer.writeln("    return '$className(id: \$id';");
+
+  // Add first few fields to toString
+  final displayFields = fields.take(3).toList();
+  for (var field in displayFields) {
+    final fieldName = removeSnake(field.name);
+    buffer.writeln("        ', $fieldName: \${$fieldName}'");
+  }
+
+  buffer.writeln("        ')';");
+  buffer.writeln('  }');
+}
+
+/// Generates file URL helper methods for file fields.
+void generateFileUrlMethods(
+  StringBuffer buffer,
+  CollectionModel collection,
+  List<CollectionField> fields,
+) {
+  for (var field in fields) {
+    if (field.type == 'file') {
+      final fieldName = removeSnake(field.name);
+      final maxSelect = field.get<int>('options.maxSelect', 0);
+
+      if (maxSelect == 1) {
+        // Single file - generate URL helper
+        buffer.writeln();
+        buffer.writeln('  /// Returns the file URL for [$fieldName].');
+        buffer.writeln(
+            '  /// [thumb] - Optional thumbnail size (e.g., "100x100").');
+        buffer.writeln("  /// Returns null if [$fieldName] or [id] is null.");
+        buffer.writeln(
+            '  String? ${fieldName}Url(PocketBase pb, {String? thumb}) {');
+        buffer
+            .writeln('    if ($fieldName == null || id == null) return null;');
+        buffer.writeln(
+            "    final record = RecordModel(id: id!, collectionId: collectionId, collectionName: collectionName);");
+        buffer.writeln(
+            '    return pb.files.getURL(record, $fieldName!, thumb: thumb)?.toString();');
+        buffer.writeln('  }');
+      } else {
+        // Multiple files - generate URL helpers
+        buffer.writeln();
+        buffer.writeln(
+            '  /// Returns the URL for a specific file in [$fieldName].');
+        buffer.writeln('  /// [index] - The index of the file in the list.');
+        buffer.writeln(
+            '  /// [thumb] - Optional thumbnail size (e.g., "100x100").');
+        buffer.writeln(
+            "  /// Returns null if [$fieldName] is null, empty, or index is out of bounds.");
+        buffer.writeln(
+            '  String? ${fieldName}UrlAt(PocketBase pb, int index, {String? thumb}) {');
+        buffer
+            .writeln('    if ($fieldName == null || id == null) return null;');
+        buffer.writeln(
+            '    if (index < 0 || index >= $fieldName!.length) return null;');
+        buffer.writeln(
+            "    final record = RecordModel(id: id!, collectionId: collectionId, collectionName: collectionName);");
+        buffer.writeln(
+            '    return pb.files.getURL(record, $fieldName![index], thumb: thumb)?.toString();');
+        buffer.writeln('  }');
+        buffer.writeln();
+        buffer.writeln('  /// Returns all file URLs for [$fieldName].');
+        buffer.writeln(
+            '  /// [thumb] - Optional thumbnail size (e.g., "100x100").');
+        buffer.writeln(
+            "  /// Returns an empty list if [$fieldName] is null or empty.");
+        buffer.writeln(
+            '  List<String> ${fieldName}Urls(PocketBase pb, {String? thumb}) {');
+        buffer.writeln('    if ($fieldName == null || id == null) return [];');
+        buffer.writeln(
+            "    final record = RecordModel(id: id!, collectionId: collectionId, collectionName: collectionName);");
+        buffer.writeln(
+            '    return $fieldName!.map((f) => pb.files.getURL(record, f, thumb: thumb)?.toString() ?? \'\').toList();');
+        buffer.writeln('  }');
+      }
+    }
+  }
 }
 
 /// Generates the factory constructor for creating an instance from a PocketBase model.
@@ -886,6 +1021,180 @@ void generateStaticMethods(StringBuffer buffer, CollectionModel collection) {
       '  static Future<void> delete(PocketBase pb, String id) async {');
   buffer.writeln("    await pb.collection('$collectionName').delete(id);");
   buffer.writeln('  }');
+  buffer.writeln();
+
+  // Paginated result method
+  buffer.writeln('  /// Fetches a paginated list with metadata.');
+  buffer.writeln(
+      '  static Future<PaginatedResult<$className>> getPaginated(PocketBase pb, {');
+  buffer.writeln('    int page = 1,');
+  buffer.writeln('    int perPage = 30,');
+  buffer.writeln('    String? filter,');
+  buffer.writeln('    String? sort,');
+  buffer.writeln('    String? expand,');
+  buffer.writeln('    String? fields,');
+  buffer.writeln('  }) async {');
+  buffer.writeln(
+      "    final result = await pb.collection('$collectionName').getList(");
+  buffer.writeln('      page: page,');
+  buffer.writeln('      perPage: perPage,');
+  buffer.writeln('      filter: filter,');
+  buffer.writeln('      sort: sort,');
+  buffer.writeln('      expand: expand,');
+  buffer.writeln('      fields: fields,');
+  buffer.writeln('    );');
+  buffer.writeln('    return PaginatedResult<$className>(');
+  buffer
+      .writeln('      items: result.items.map($className.fromModel).toList(),');
+  buffer.writeln('      page: result.page,');
+  buffer.writeln('      perPage: result.perPage,');
+  buffer.writeln('      totalItems: result.totalItems,');
+  buffer.writeln('      totalPages: result.totalPages,');
+  buffer.writeln('    );');
+  buffer.writeln('  }');
+  buffer.writeln();
+
+  // Realtime subscription methods
+  buffer.writeln('  /// Subscribe to changes for this collection.');
+  buffer.writeln(
+      '  /// [callback] receives the action ("create", "update", "delete") and the record.');
+  buffer.writeln('  static Future<UnsubscribeFunc> subscribeAll(');
+  buffer.writeln('    PocketBase pb,');
+  buffer.writeln(
+      '    void Function($className? record, String action) callback, {');
+  buffer.writeln('    String? filter,');
+  buffer.writeln('    String? expand,');
+  buffer.writeln('    String? fields,');
+  buffer.writeln('  }) async {');
+  buffer.writeln(
+      "    return pb.collection('$collectionName').subscribe('*', (e) {");
+  buffer.writeln(
+      '      final record = e.record != null ? $className.fromModel(e.record!) : null;');
+  buffer.writeln('      callback(record, e.action);');
+  buffer.writeln('    }, filter: filter, expand: expand, fields: fields);');
+  buffer.writeln('  }');
+  buffer.writeln();
+
+  buffer.writeln('  /// Subscribe to changes for a specific record.');
+  buffer.writeln('  /// [id] - The record ID to watch.');
+  buffer
+      .writeln('  /// [callback] receives the action and the updated record.');
+  buffer.writeln('  static Future<UnsubscribeFunc> subscribe(');
+  buffer.writeln('    PocketBase pb,');
+  buffer.writeln('    String id,');
+  buffer.writeln(
+      '    void Function($className? record, String action) callback, {');
+  buffer.writeln('    String? expand,');
+  buffer.writeln('    String? fields,');
+  buffer.writeln('  }) async {');
+  buffer.writeln(
+      "    return pb.collection('$collectionName').subscribe(id, (e) {");
+  buffer.writeln(
+      '      final record = e.record != null ? $className.fromModel(e.record!) : null;');
+  buffer.writeln('      callback(record, e.action);');
+  buffer.writeln('    }, expand: expand, fields: fields);');
+  buffer.writeln('  }');
+}
+
+/// Generates auth helper methods for auth-type collections.
+void generateAuthMethods(StringBuffer buffer, CollectionModel collection) {
+  final className = '${removeSnake(capName(collection.name))}Model';
+  final collectionName = collection.name;
+
+  buffer.writeln();
+  buffer.writeln('// Auth collection methods');
+  buffer.writeln('extension ${className}AuthExtension on PocketBase {');
+  buffer.writeln('  /// Authenticate with email/password.');
+  buffer.writeln(
+      '  Future<AuthResult<$className>> auth${removeSnake(capName(collection.name))}WithPassword(');
+  buffer.writeln('    String email,');
+  buffer.writeln('    String password, {');
+  buffer.writeln('    String? expand,');
+  buffer.writeln('    String? fields,');
+  buffer.writeln('  }) async {');
+  buffer.writeln(
+      "    final result = await collection('$collectionName').authWithPassword(");
+  buffer.writeln('      email,');
+  buffer.writeln('      password,');
+  buffer.writeln('      expand: expand,');
+  buffer.writeln('      fields: fields,');
+  buffer.writeln('    );');
+  buffer.writeln('    return AuthResult<$className>(');
+  buffer.writeln('      token: result.token,');
+  buffer.writeln('      record: $className.fromModel(result.record),');
+  buffer.writeln('    );');
+  buffer.writeln('  }');
+  buffer.writeln();
+  buffer.writeln('  /// Refresh auth token.');
+  buffer.writeln(
+      '  Future<AuthResult<$className>> auth${removeSnake(capName(collection.name))}Refresh({');
+  buffer.writeln('    String? expand,');
+  buffer.writeln('    String? fields,');
+  buffer.writeln('  }) async {');
+  buffer.writeln(
+      "    final result = await collection('$collectionName').authRefresh(");
+  buffer.writeln('      expand: expand,');
+  buffer.writeln('      fields: fields,');
+  buffer.writeln('    );');
+  buffer.writeln('    return AuthResult<$className>(');
+  buffer.writeln('      token: result.token,');
+  buffer.writeln('      record: $className.fromModel(result.record),');
+  buffer.writeln('    );');
+  buffer.writeln('  }');
+  buffer.writeln();
+  buffer.writeln('  /// Request password reset email.');
+  buffer.writeln(
+      '  Future<void> request${removeSnake(capName(collection.name))}PasswordReset(String email) async {');
+  buffer.writeln(
+      "    await collection('$collectionName').requestPasswordReset(email);");
+  buffer.writeln('  }');
+  buffer.writeln();
+  buffer.writeln('  /// Confirm password reset with token.');
+  buffer.writeln(
+      '  Future<void> confirm${removeSnake(capName(collection.name))}PasswordReset(');
+  buffer.writeln('    String token,');
+  buffer.writeln('    String password,');
+  buffer.writeln('    String passwordConfirm,');
+  buffer.writeln('  ) async {');
+  buffer
+      .writeln("    await collection('$collectionName').confirmPasswordReset(");
+  buffer.writeln('      token,');
+  buffer.writeln('      password,');
+  buffer.writeln('      passwordConfirm,');
+  buffer.writeln('    );');
+  buffer.writeln('  }');
+  buffer.writeln();
+  buffer.writeln('  /// Request verification email.');
+  buffer.writeln(
+      '  Future<void> request${removeSnake(capName(collection.name))}Verification(String email) async {');
+  buffer.writeln(
+      "    await collection('$collectionName').requestVerification(email);");
+  buffer.writeln('  }');
+  buffer.writeln();
+  buffer.writeln('  /// Confirm verification with token.');
+  buffer.writeln(
+      '  Future<void> confirm${removeSnake(capName(collection.name))}Verification(String token) async {');
+  buffer.writeln(
+      "    await collection('$collectionName').confirmVerification(token);");
+  buffer.writeln('  }');
+  buffer.writeln('}');
+}
+
+/// Generates auth result class for typed auth responses.
+void generateAuthResultClass(StringBuffer buffer, CollectionModel collection) {
+  final className = '${removeSnake(capName(collection.name))}Model';
+
+  buffer.writeln();
+  buffer.writeln('/// Auth result containing token and model.');
+  buffer.writeln('class ${className}AuthResult {');
+  buffer.writeln('  final String token;');
+  buffer.writeln('  final $className record;');
+  buffer.writeln();
+  buffer.writeln('  const ${className}AuthResult({');
+  buffer.writeln('    required this.token,');
+  buffer.writeln('    required this.record,');
+  buffer.writeln('  });');
+  buffer.writeln('}');
 }
 
 /// Generates the static filter getter for the model class.

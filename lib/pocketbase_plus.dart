@@ -7,3 +7,4 @@ library;
 export 'src/models.dart';
 export 'src/helpers.dart';
 export 'src/config.dart';
+export 'src/pagination.dart';

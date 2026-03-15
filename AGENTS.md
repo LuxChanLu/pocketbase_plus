@@ -15,9 +15,21 @@ Pocketbase Plus is a Dart package that automates model generation for PocketBase
 - `pb.admins` is deprecated; use `pb.collection('_superusers')` for admin authentication
 
 **Generated Files:**
-- `<collection>.dart` - Model class with fields, constructor, fromModel, toMap, copyWith
-- `<collection>_extension.dart` - Extension methods for CRUD operations
+- `<collection>.dart` - Model class with fields, constructor, fromModel, toMap, copyWith, equality, toString, file URL helpers
+- `<collection>_extension.dart` - Extension methods for CRUD operations (pocketbase extensions)
 - `models.dart` - Barrel file exporting all models and extensions
+
+**Generated Model Features:**
+- Collection ID/name constants (`collectionId`, `collectionName`)
+- Static CRUD methods (`getOne`, `getList`, `getFullList`, `getFirst`, `create`, `update`, `delete`)
+- Paginated result method (`getPaginated`) - returns `PaginatedResult<T>` with metadata
+- Realtime subscriptions (`subscribe`, `subscribeAll`)
+- Type-safe filter builders (`Model.f.name.eq('value')`)
+- Equality and hash code overrides
+- `toString()` override
+- `copyWith()` method
+- File URL helpers (for file fields)
+- Auth helpers (for auth collections)
 
 ## Build/Lint/Test Commands
 
@@ -347,6 +359,110 @@ await UsersModel.getList(pb, filter: filter.build());
 | bool | `FieldFilter` | `eq`, `neq`, `isNull`, `isNotNull` |
 | relation (single) | `FieldFilter` | `eq`, `neq`, `isNull`, `isNotNull` |
 | relation (multiple) | `ArrayFilter` | `contains`, `containsAny`, `hasLength` |
+
+### Paginated Results
+
+Use `getPaginated()` to receive pagination metadata:
+
+```dart
+final result = await UsersModel.getPaginated(pb, page: 1, perPage: 30);
+print(result.items);        // List<UsersModel>
+print(result.page);         // Current page
+print(result.perPage);      // Items per page
+print(result.totalItems);   // Total items across all pages
+print(result.totalPages);   // Total pages
+print(result.hasNextPage);  // true if there's a next page
+print(result.hasPrevPage);  // true if there's a previous page
+```
+
+### Realtime Subscriptions
+
+Subscribe to collection changes:
+
+```dart
+// Subscribe to all changes in collection
+final unsubscribe = await UsersModel.subscribeAll(pb, (record, action) {
+  print('Action: $action'); // 'create', 'update', 'delete'
+  print('Record: $record');
+});
+
+// Subscribe to specific record
+final unsubscribe = await UsersModel.subscribe(pb, 'USER_ID', (record, action) {
+  print('Record updated: $record');
+});
+
+// Later: stop receiving updates
+await unsubscribe();
+```
+
+### File URL Helpers
+
+For file fields, generated helpers build URLs:
+
+```dart
+class UsersModel {
+  final String? avatar;  // Single file field
+  
+  // Generated helper:
+  String? avatarUrl(PocketBase pb, {String? thumb}) {
+    // Returns URL with optional thumbnail size
+  }
+}
+
+// For multiple file fields:
+class GalleryModel {
+  final List<String>? images;
+  
+  // Generated helpers:
+  String? imagesUrlAt(PocketBase pb, int index, {String? thumb});  // URL at index
+  List<String> imagesUrls(PocketBase pb, {String? thumb});          // All URLs
+}
+```
+
+### Auth Collection Methods
+
+For auth-type collections (`type: 'auth'`), additional helpers are generated:
+
+```dart
+extension UsersAuthExtension on PocketBase {
+  // Authentication
+  Future<AuthResult<UsersModel>> authUsersWithPassword(String email, String password);
+  Future<AuthResult<UsersModel>> authUsersRefresh();
+  
+  // Password reset
+  Future<void> requestUsersPasswordReset(String email);
+  Future<void> confirmUsersPasswordReset(String token, String password, String passwordConfirm);
+  
+  // Email verification
+  Future<void> requestUsersVerification(String email);
+  Future<void> confirmUsersVerification(String token);
+}
+```
+
+### Collection Constants
+
+Each model exposes collection metadata:
+
+```dart
+class UsersModel {
+  static const String collectionId = 'COLLECTION_ID';
+  static const String collectionName = 'users';
+  // ...
+}
+```
+
+### Equality & ToString
+
+Generated models implement value equality:
+
+```dart
+final user1 = UsersModel(id: '1', name: 'John');
+final user2 = UsersModel(id: '1', name: 'Jane');
+
+print(user1 == user2);  // true (equality by ID)
+print(user1.hashCode);  // Hash based on ID
+print(user1.toString()); // UsersModel(id: 1, name: John, ...)
+```
 | file (multiple) | `ArrayFilter` | `contains`, `containsAny`, `hasLength` |
 - The `collectionId` in the PocketBase schema maps the relation to its target collection
 - Self-referential relations (collection references itself) are supported
