@@ -359,6 +359,9 @@ void generateConstructor(
   buffer.writeln('    this.updated,');
 
   for (var field in fields) {
+    if (field.name == "id" || field.name == "created" || field.name == "updated") {
+      continue;
+    }
     buffer.writeln(
         "    ${field.required ? 'required' : ''} this.${removeSnake(field.name)},");
   }
@@ -416,6 +419,9 @@ void generateCopyWithMethod(
   buffer.writeln('      updated: updated ?? this.updated,');
 
   for (var field in fields) {
+    if (field.name == "id" || field.name == "created" || field.name == "updated") {
+      continue;
+    }
     buffer.writeln(
         "      ${removeSnake(field.name)}: ${removeSnake(field.name)} ?? this.${removeSnake(field.name)},");
   }
@@ -557,6 +563,9 @@ void generateFactoryConstructor(
   buffer.writeln("      updated: DateTime.parse(r.get<String>('updated')),");
 
   for (var field in collection.fields) {
+    if (field.name == "id" || field.name == "created" || field.name == "updated") {
+      continue;
+    }
     final fieldName = removeSnake(field.name);
     if (field.type == 'select') {
       buffer.writeln(
