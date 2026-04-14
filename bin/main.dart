@@ -388,6 +388,9 @@ void generateCopyWithMethod(
   buffer.writeln('    DateTime? updated,');
 
   for (var field in fields) {
+    if (field.name == "id" || field.name == "created" || field.name == "updated") {
+      continue;
+    }
     var type = getType(field);
     if (field.required && type != 'dynamic') {
       buffer.writeln('    ${getType(field)}? ${removeSnake(field.name)},');
@@ -473,6 +476,9 @@ void generateToStringMethod(
   // Add first few fields to toString
   final displayFields = fields.take(3).toList();
   for (var field in displayFields) {
+    if (field.name == "id" || field.name == "created" || field.name == "updated") {
+      continue;
+    }
     final fieldName = removeSnake(field.name);
     buffer.writeln("        ', $fieldName: \${$fieldName}'");
   }
@@ -644,6 +650,10 @@ void generateToMapMethod(StringBuffer buffer, List<CollectionField> fields) {
   buffer.writeln('    return {');
 
   for (var field in fields) {
+    if (field.name == "id" || field.name == "created" || field.name == "updated") {
+      continue;
+    }
+
     final fieldName = removeSnake(field.name);
     if (field.type == 'select') {
       buffer.writeln("      '${field.name}': $fieldName.value,");
