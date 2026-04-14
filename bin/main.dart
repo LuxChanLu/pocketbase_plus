@@ -274,7 +274,7 @@ String generateModelForCollection(
 void generateEnumForField(StringBuffer buffer, CollectionField field) {
   // Start the enum definition with constructor
   buffer.writeln('enum ${capName(removeSnake(field.name))}Enum {');
-  for (var option in field.get<List<dynamic>>('options.values', [])) {
+  for (var option in field.get<List<dynamic>>('values', [])) {
     buffer.writeln('${removeSnake(option)}("$option"),');
   }
   buffer.writeln(';\n');
@@ -319,6 +319,9 @@ void generateClassFields(
   buffer.writeln("  static const String Updated = 'updated';");
 
   for (var field in fields) {
+    if (field.name == "id" || field.name == "created" || field.name == "updated") {
+      continue;
+    }
     buffer.writeln('');
     buffer.writeln('  final ${getType(field)} ${removeSnake(field.name)};');
     buffer.writeln(
